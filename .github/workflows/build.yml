@@ -11,8 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [18.x]
-        go-version: [1.21.x]
+        node-version: [20.x]
+        go-version: [1.22.x]
 
     steps:
     - uses: actions/checkout@v4
@@ -22,8 +22,27 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: ${{ matrix.node-version }}
-        cache: 'npm'
-        cache-dependency-path: 'ui/package-lock.json'
+
+    # 设置 pnpm
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v3
+      with:
+        version: latest
+        run_install: false
+
+    # 设置 pnpm 缓存
+    - name: Get pnpm store directory
+      shell: bash
+      run: |
+        echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+    - uses: actions/cache@v4
+      name: Setup pnpm cache
+      with:
+        path: ${{ env.STORE_PATH }}
+        key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+        restore-keys: |
+          ${{ runner.os }}-pnpm-store-
 
     # 设置 Go 环境
     - name: Setup Go ${{ matrix.go-version }}
@@ -37,8 +56,10 @@ jobs:
     - name: Build Frontend
       working-directory: ui
       run: |
-        npm ci
-        npm run build
+        pnpm install
+        pnpm build
+        cd ..
+        cp -r ui/dist .
 
     # 构建后端
     - name: Build Backend
