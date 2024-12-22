@@ -1,0 +1,90 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ master, dev, 'release/*' ]
+  pull_request:
+    branches: [ master, dev ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18.x]
+        go-version: [1.21.x]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    # 设置 Node.js 环境
+    - name: Setup Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+        cache-dependency-path: 'ui/package-lock.json'
+
+    # 设置 Go 环境
+    - name: Setup Go ${{ matrix.go-version }}
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ matrix.go-version }}
+        cache: true
+        cache-dependency-path: go.sum
+
+    # 构建前端
+    - name: Build Frontend
+      working-directory: ui
+      run: |
+        npm ci
+        npm run build
+
+    # 构建后端
+    - name: Build Backend
+      run: |
+        go mod download
+        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o easyCacheMirror
+
+    # 运行测试
+    - name: Run Tests
+      run: go test -v ./...
+
+    # 打包发布文件
+    - name: Package Release
+      if: startsWith(github.ref, 'refs/heads/release/')
+      run: |
+        mkdir -p release
+        cp easyCacheMirror release/
+        cp -r dist release/
+        cp Dockerfile release/
+        cp docker-compose.yml release/
+        cd release
+        zip -r ../easycachemirror.zip *
+
+    # 创建 Release
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/heads/release/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: easycachemirror.zip
+        tag_name: ${{ github.ref_name }}
+        name: Release ${{ github.ref_name }}
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    # 删除 release 分支
+    - name: Delete release branch
+      if: startsWith(github.ref, 'refs/heads/release/')
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const branch = context.ref.replace('refs/heads/', '')
+          await github.rest.git.deleteRef({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            ref: `heads/${branch}`
+          })

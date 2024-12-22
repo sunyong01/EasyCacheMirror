@@ -1,0 +1,45 @@
+# 编译输出
+/easyCacheMirror
+/dist
+
+# 前端
+/ui/node_modules
+/ui/.vite
+/ui/dist
+/ui/*.local
+
+# 数据目录
+/data
+*.db
+*.db-journal
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# 日志
+*.log
+
+# 环境变量
+.env
+.env.*
+
+# 临时文件
+tmp/
+temp/
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go.work
+
+# 依赖
+vendor/ 

@@ -1,0 +1,99 @@
+name: Build x64
+
+on:
+  push:
+    branches:
+      - master
+      - dev
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: https://git.syweb.fun/sy/checkout@v4
+
+      # 设置 Go 环境
+      - name: Setup Go from custom source
+        run: |
+          wget --quiet ${{ vars.OBJECT_MIRROR }}/opensource/go1.22.5.linux-amd64.tar.gz -O go.tar.gz
+          sudo rm -rf /usr/local/go
+          sudo tar -C /usr/local -xzf go.tar.gz
+          echo "PATH=/usr/local/go/bin:$PATH" >> $GITHUB_ENV
+          rm go.tar.gz
+          source $GITHUB_ENV
+          go version
+
+      # 设置 Node.js
+      - name: Setup Node.js from custom source
+        run: |
+          wget --quiet ${{ vars.OBJECT_MIRROR }}/opensource/node-v20.18.1-linux-x64.tar.xz -O node.tar.xz
+          sudo tar -xf node.tar.xz -C /usr/local --strip-components=1
+          rm node.tar.xz
+
+      # 设置 pnpm
+      - name: Setup pnpm
+        run: |
+          npm config set registry ${{ vars.NPM_REG_LOCAL }}
+          npm install -g pnpm
+
+      # 安装前端依赖
+      - name: Install pnpm dependencies
+        run: |
+          cd ui
+          pnpm config set registry ${{ vars.NPM_REG_LOCAL }}
+          pnpm install
+
+      # 构建前端
+      - name: Build Frontend
+        run: |
+          cd ui
+          pnpm build
+          cd ..
+          cp -r ui/dist .
+
+      # 构建后端
+      - name: Build Backend
+        env:
+          GOPROXY: https://goproxy.cn,direct
+          GO111MODULE: on
+        run: |
+          go mod tidy
+          go build -v -o easyCacheMirror
+
+      # 创建发布包
+      - name: Create Release Package
+        run: |
+          mkdir -p release
+          cp easyCacheMirror release/
+          cp -r dist release/
+          cp Dockerfile release/
+          cp docker-compose.yml release/
+          cd release
+          zip -r ../easycachemirror.zip *
+
+      # 上传构建产物（dev分支）
+      - name: Upload Build Artifact
+        if: github.ref == 'refs/heads/dev'
+        uses: https://git.syweb.fun/sy/upload-artifact@v3
+        with:
+          name: easycachemirror
+          path: easycachemirror.zip
+          retention-days: 5
+
+      # 为master分支创建Release
+      - name: Generate release tag
+        if: github.ref == 'refs/heads/master'
+        id: tag
+        run: |
+          echo "::set-output name=release_tag::release_$(date +"%Y.%m.%d_%H-%M")"
+
+      - name: Release
+        if: github.ref == 'refs/heads/master'
+        uses: https://git.syweb.fun/sy/gitea-release-action@v1
+        with:
+          files: easycachemirror.zip
+          tag_name: ${{ steps.tag.outputs.release_tag }}
