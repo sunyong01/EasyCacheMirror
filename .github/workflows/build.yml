@@ -71,9 +71,8 @@ jobs:
     - name: Run Tests
       run: go test -v ./...
 
-    # 打包发布文件
-    - name: Package Release
-      if: startsWith(github.ref, 'refs/heads/release/')
+    # 打包构建产物（所有分支）
+    - name: Package Artifacts
       run: |
         mkdir -p release
         cp easyCacheMirror release/
@@ -83,7 +82,15 @@ jobs:
         cd release
         zip -r ../easycachemirror.zip *
 
-    # 创建 Release
+    # 上传构建产物（所有分支）
+    - name: Upload Build Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: easycachemirror-${{ github.ref_name }}
+        path: easycachemirror.zip
+        retention-days: 5
+
+    # 创建 Release（仅 release 分支）
     - name: Create Release
       if: startsWith(github.ref, 'refs/heads/release/')
       uses: softprops/action-gh-release@v1
